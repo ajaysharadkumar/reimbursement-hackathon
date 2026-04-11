@@ -1,10 +1,12 @@
 from langgraph.graph import StateGraph, END
-from src.agent.state import ReimbursementState
+
 from src.agent import nodes
+from src.agent.state import reimbursementState
+
 
 def create_workflow():
     """Creates the LangGraph workflow for expense reimbursement."""
-    workflow = StateGraph(ReimbursementState)
+    workflow = StateGraph(reimbursementState)
 
     # Add nodes
     workflow.add_node("read_email", nodes.read_email_node)
@@ -39,5 +41,6 @@ def create_workflow():
     workflow.add_edge("update_tracker", END)
 
     return workflow.compile()
+
 
 app = create_workflow()

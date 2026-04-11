@@ -77,7 +77,7 @@ The agent automatically creates and appends to **`records/claims_log.csv`** upon
 
 ## ⚙️ How It Works: The Agent's Logic Flow
 
-The agent operates as a state machine (graph), passing the `ReimbursementState` between nodes.
+The agent operates as a state machine (graph), passing the `reimbursementState` between nodes.
 
 1.  **Start**: The agent is triggered (e.g., by `main.py`).
 2.  **`read_email_node`**: Fetches the oldest unread email. If it's a claim, it uses an LLM to extract initial data and save the receipt attachment.

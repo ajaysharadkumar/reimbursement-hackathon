@@ -12,6 +12,13 @@ dependencies = [
     "pandas>=3.0.2",
     "pandas-stubs==3.0.0.260204",
     "protobuf>=7.34.1",
-    "python-dotenv>=1.1.1",
+    "pymupdf>=1.27.2.2",
+    "python-dotenv>=1.2.2",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.10",
+    "ty>=0.0.29",
 ]
 

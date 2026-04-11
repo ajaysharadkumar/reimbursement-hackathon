@@ -1,8 +1,9 @@
 import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
 
 import easyocr
 import numpy as np
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # Dependency Check & Import
 # We will explicitly use PyMuPDF (fitz) to handle PDFs.

@@ -1,9 +1,10 @@
-from typing import TypedDict, Annotated, List
 import operator
+from typing import TypedDict, Annotated, List
+
 from langchain_core.messages import BaseMessage
 
 
-class ReimbursementState(TypedDict):
+class reimbursementState(TypedDict):
     """
     Defines the structure of the state that flows through the graph.
     """

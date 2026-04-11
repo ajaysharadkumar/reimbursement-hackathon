@@ -1,18 +1,21 @@
 import json
-import uuid
-import re
-import pandas as pd
 import os
+import re
+import uuid
 from datetime import datetime
+
+import pandas as pd
 from langchain_openai import ChatOpenAI
-from src.agent.state import ReimbursementState
-from src.utils import data_loader
-from src.config import  EMPLOYEES_FILE, VENDORS_FILE, POLICIES_FILE, CLAIMS_FILE
+
+from src.agent.state import reimbursementState
+from src.config import COMPLIANCE_EMAIL
+from src.config import EMPLOYEES_FILE, VENDORS_FILE, POLICIES_FILE, CLAIMS_FILE
 from src.services import email_service, ocr_service
+from src.utils import data_loader
 from src.utils.helpers import (
     get_manager_details,
 )
-from src.config import COMPLIANCE_EMAIL
+
 
 def initialize_claims_file():
     """Checks if the claims file exists and creates it with headers if not."""
@@ -64,12 +67,12 @@ llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
 # Agent Nodes
 
-def generate_email_content(llm, state: ReimbursementState, target_audience: str, purpose: str) -> dict:
+def generate_email_content(llm, state: reimbursementState, target_audience: str, purpose: str) -> dict:
     """
     Generates a professional email subject and body using the LLM.
 
     :param llm: The initialized ChatOpenAI instance.
-    :param state: The current ReimbursementState.
+    :param state: The current reimbursementState.
     :param target_audience: Who the email is for ('employee', 'manager', 'compliance').
     :param purpose: The main goal of the email (e.g., 'Approval', 'Rejection', 'Manager Review', 'High-Risk Flag').
     :return: A dictionary with 'subject' and 'body'.
@@ -92,7 +95,7 @@ def generate_email_content(llm, state: ReimbursementState, target_audience: str,
     }
 
     # Create a specific prompt for the audience
-    system_prompt = f"""
+    system_prompt = """
     You are an AI assistant for an automated expense system. Your task is to write a professional, clear, and concise email.
     
     *** CRITICAL INSTRUCTION ***
@@ -153,7 +156,8 @@ def generate_email_content(llm, state: ReimbursementState, target_audience: str,
             "body": f"Your claim status is: {state.get('final_status')}. Reason: {state.get('rejection_reason')}"
         }
 
-def read_email_node(state: ReimbursementState):
+
+def read_email_node(state: reimbursementState):
     """Reads the latest email, cleans the LLM response, and extracts receipt information."""
     print("---NODE: READING EMAIL---")
     email_data = email_service.read_unread_emails()
@@ -249,7 +253,7 @@ def read_email_node(state: ReimbursementState):
     return update
 
 
-def process_receipt_node(state: ReimbursementState):
+def process_receipt_node(state: reimbursementState):
     """Processes the receipt using OCR and an LLM to extract details robustly."""
     print("---NODE: PROCESSING RECEIPT (OCR & LLM)---")
     text, _ = ocr_service.run_ocr_on_file(state['receipt_path'])
@@ -316,7 +320,7 @@ def process_receipt_node(state: ReimbursementState):
     return update
 
 
-def verify_claim_node(state: ReimbursementState):
+def verify_claim_node(state: reimbursementState):
     """Compares data from email and receipt to check for discrepancies."""
     print("---NODE: VERIFYING CLAIM DATA---")
 
@@ -343,7 +347,8 @@ def verify_claim_node(state: ReimbursementState):
         print(f"🛑 MISMATCH DETECTED: {reason}")
         return {"is_mismatched": True, "rejection_reason": reason}
 
-def fraud_and_anomaly_detection_node(state: ReimbursementState):
+
+def fraud_and_anomaly_detection_node(state: reimbursementState):
     print("\n---NODE: FRAUD & ANOMALY DETECTION---")
 
     # Extract fields safely
@@ -456,7 +461,7 @@ def fraud_and_anomaly_detection_node(state: ReimbursementState):
     }
 
 
-def policy_and_risk_assessment_node(state: ReimbursementState):
+def policy_and_risk_assessment_node(state: reimbursementState):
     """
     Checks employee, policy, and vendor compliance.
     This node is designed to *always* return the employee and policy
@@ -633,7 +638,7 @@ def policy_and_risk_assessment_node(state: ReimbursementState):
     return updates
 
 
-def auto_approve_node(state: ReimbursementState):
+def auto_approve_node(state: reimbursementState):
     """Approves a low-risk claim and notifies the employee."""
     print("---NODE: AUTO-APPROVING CLAIM (LOW RISK)---")
 
@@ -658,7 +663,7 @@ def auto_approve_node(state: ReimbursementState):
     return {"final_status": "Approved"}
 
 
-def escalate_to_manager_node(state: ReimbursementState):
+def escalate_to_manager_node(state: reimbursementState):
     """Escalates a medium-risk claim to the employee's manager."""
     print("---NODE: ESCALATING TO MANAGER (MEDIUM RISK)---")
 
@@ -682,12 +687,12 @@ def escalate_to_manager_node(state: ReimbursementState):
 
         print(f"Escalation email sent to manager: {state['manager_email']}")
     else:
-        print(f"🛑 Error: Manager email not found. Cannot escalate.")
+        print("🛑 Error: Manager email not found. Cannot escalate.")
 
     return {"final_status": "Escalated_To_Manager"}
 
 
-def escalate_to_compliance_node(state: ReimbursementState):
+def escalate_to_compliance_node(state: reimbursementState):
     """Rejects a high-risk claim and escalates it to the compliance team."""
     print("---NODE: ESCALATING TO COMPLIANCE & REJECTING (HIGH RISK)---")
 
@@ -727,7 +732,8 @@ def escalate_to_compliance_node(state: ReimbursementState):
 
     return {"final_status": "Rejected_And_Flagged"}
 
-def update_google_sheet_node(state: ReimbursementState):
+
+def update_google_sheet_node(state: reimbursementState):
     """
     Updates the final status of the claim by appending a detailed
     record to the CSV file defined in config.CLAIMS_FILE.
@@ -788,7 +794,7 @@ def update_google_sheet_node(state: ReimbursementState):
 
 # --- Conditional Router ---
 
-def route_based_on_risk(state: ReimbursementState):
+def route_based_on_risk(state: reimbursementState):
     """Routes the claim based on its assessed risk level."""
     risk_level = state.get('risk_level', 'high')  # Default to high risk if not set
     print(f"Routing based on risk level: {risk_level}")
