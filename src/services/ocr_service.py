@@ -2,7 +2,6 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 import easyocr
-import os
 import numpy as np
 
 # Dependency Check & Import

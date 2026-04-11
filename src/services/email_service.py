@@ -1,6 +1,5 @@
 import os
 import base64
-import mimetypes
 from email.mime.text import MIMEText
 
 from google.auth.transport.requests import Request
