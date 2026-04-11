@@ -1,0 +1,19 @@
+﻿vendor_id,category,vendor_verified
+V2012,Travel,TRUE
+V202,Travel,TRUE
+V203,Travel,FALSE
+V204,Lodging,TRUE
+V205,Lodging,TRUE
+V206,Lodging,FALSE
+V207,Meals,TRUE
+V208,Meals,TRUE
+V209,Office Supplies,TRUE
+V210,Office Supplies,FALSE
+V211,Travel,TRUE
+V212,Travel,FALSE
+V213,Training,TRUE
+V214,Training,TRUE
+V215,Other,TRUE
+V216,Other,FALSE
+V217,Travel,TRUE
+V218,Lodging,TRUE
