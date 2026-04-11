@@ -16,9 +16,15 @@ dependencies = [
     "python-dotenv>=1.2.2",
 ]
 
+[tool.pyrefly]
+search-path = ["."]
+project-includes = ["src"]
+project-excludes = [".venv"]
+pydantic = true
+
 [dependency-groups]
 dev = [
+    "pyrefly>=0.60.2",
     "ruff>=0.15.10",
-    "ty>=0.0.29",
 ]
 
