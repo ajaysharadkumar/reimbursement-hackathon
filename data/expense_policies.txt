@@ -1,0 +1,25 @@
+# Company Expense Policy
+
+## Travel
+- P101: Travel expenses have a maximum allowance of INR 5000 for applicable grades G4 and G5.
+- P102: Travel expenses have a maximum allowance of INR 2500 for applicable grades G2 and G3.
+- P103: Travel expenses have a maximum allowance of INR 1000 for applicable grade G1.
+
+## Lodging
+- P104: Lodging expenses have a maximum allowance of INR 8000 for applicable grades G4 and G5.
+- P105: Lodging expenses have a maximum allowance of INR 4000 for applicable grades G2 and G3.
+- P106: Lodging expenses have a maximum allowance of INR 2000 for applicable grade G1.
+
+## Meals
+- P107: Meals expenses have a maximum allowance of INR 500 for applicable grades G1, G2, G3, G4, and G5.
+
+## Office Supplies
+- P108: Office Supplies expenses have a maximum allowance of INR 1000 for applicable grades G3, G4, and G5.
+- P109: Office Supplies expenses have a maximum allowance of INR 500 for applicable grades G1 and G2.
+
+## Training
+- P112: Training expenses have a maximum allowance of INR 10000 for applicable grades G3, G4, and G5.
+- P113: Training expenses have a maximum allowance of INR 5000 for applicable grades G1 and G2.
+
+## Other
+- P114: Other expenses have a maximum allowance of INR 750 for applicable grades G1, G2, G3, G4, and G5.

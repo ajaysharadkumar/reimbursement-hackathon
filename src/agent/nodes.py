@@ -15,7 +15,26 @@ from src.utils import data_loader
 from src.utils.helpers import (
     get_manager_details,
 )
+from src.rag.retriever import get_policy_retriever
+from pydantic import BaseModel, Field
+from typing import Literal, Optional
 
+class EmailExtraction(BaseModel):
+    process: bool = Field(description="Whether the email is related to reimbursement")
+    reason: Optional[str] = Field(None, description="Reason if not processing (optional)")
+    employee_id: str = Field("Not Found", description="Employee ID")
+    first_name: str = Field("Not Found", description="Employee first name")
+    last_name: str = Field("Not Found", description="Employee last name")
+    email_id: str = Field("Not Found", description="Employee email ID")
+    vendor_id: str = Field("Not Found", description="Vendor ID")
+    amount: float = Field(0.0, description="Amount. Must be a number. Default 0.0")
+    category: Literal['Travel', 'Meals', 'Lodging', 'Office Supplies', 'Training', 'Other', 'Unclear'] = Field('Unclear', description="Expense category. 'local conveyance', 'taxi', 'cab', or 'auto' map to 'Travel'.")
+    payment_mode: str = Field("Not Found", description="Mode of payment")
+    date: str = Field("Not Found", description="Date of the receipt")
+
+class ReceiptExtraction(BaseModel):
+    amount: float = Field(0.0, description="Amount. Must be a number. Default 0.0")
+    category: Literal['Travel', 'Meals', 'Lodging', 'Office Supplies', 'Training', 'Other', 'Unclear'] = Field('Unclear', description="Expense category. 'local conveyance', 'taxi', 'cab', or 'auto' map to 'Travel'.")
 
 def initialize_claims_file():
     """Checks if the claims file exists and creates it with headers if not."""
@@ -174,61 +193,32 @@ def read_email_node(state: reimbursementState):
             {
                 "role": "system",
                 "content": (
-                    "You are a precision data extraction assistant. Your ONLY output must be a single, valid JSON object. "
-                    "Do not include any explanatory text, markdown formatting, or apologies. "
+                    "You are a precision data extraction assistant. "
                     "First, check if the email body contains keywords like 'reimbursement', 'claim', 'expense', 'receipt', or 'invoice'. "
-                    "If not, respond ONLY with: {\"process\": false, \"reason\": \"Email not related to reimbursement\"}\n"
-                    "If it is reimbursement-related, extract the following fields:\n"
-                    "- 'employee_id'\n"
-                    "- 'first_name'\n"
-                    "- 'last_name'\n"
-                    "- 'email_id'\n"
-                    "- 'vendor_id'\n"
-                    "- 'amount' (as a float, e.g., 123.45)\n"
-                    "- 'category' (must be one of: Travel, Meals, Lodging, Office Supplies, Training, Other)\n"
-                    "***IMPORTANT RULE: If the expense is for 'local conveyance', 'taxi', 'cab', or 'auto', you MUST map it to the 'Travel' category.***\n"
-                    "- 'payment_mode'\n"
-                    "- 'date'\n"
-                    "If any field is missing, set its value to 'Not Found' or 'Unclear'. "
+                    "If not, set 'process' to false and provide a reason. "
+                    "If it is reimbursement-related, extract the requested fields. "
+                    "If any string field is missing, set its value to 'Not Found' or 'Unclear'. "
                     "The 'amount' must be a number; if ambiguous, set it to 0.0."
                 )
             },
             {
                 "role": "user",
-                "content": f"Analyze the following email body and return ONLY the JSON object:\n\n---\nEmail Body:\n{text}\n---"
+                "content": f"Analyze the following email body:\n\n---\nEmail Body:\n{text}\n---"
             }
         ]
     )
-    response_content = llm.invoke(prompt).content
-    extracted_data = {}
-
+    
     try:
-        # Clean the response to find the JSON
-        json_start_index = response_content.find('{')
-        json_end_index = response_content.rfind('}')
-        if json_start_index != -1 and json_end_index != -1:
-            json_string = response_content[json_start_index:json_end_index + 1]
-            extracted_data = json.loads(json_string)
-        else:
-            print("Warning: No JSON object found in the LLM response.")
-            extracted_data = {}  # Ensure extracted_data is a dict
-    except json.JSONDecodeError as e:
-        print(f"Warning: Could not parse JSON from LLM response. Error: {e}")
-        extracted_data = {}  # Ensure extracted_data is a dict
+        structured_llm = llm.with_structured_output(EmailExtraction)
+        extracted_data = structured_llm.invoke(prompt)
+    except Exception as e:
+        print(f"Warning: Guardrails validation failed. Error: {e}")
+        extracted_data = EmailExtraction(process=False, reason="Validation failed due to bad LLM output.")
 
     # Check if the LLM flagged the email as irrelevant
-    if not extracted_data.get("process", True):
-        print(f"Email flagged as irrelevant. Reason: {extracted_data.get('reason')}")
+    if not extracted_data.process:
+        print(f"Email flagged as irrelevant. Reason: {extracted_data.reason}")
         return {"receipt_path": None}
-
-    amount_str = str(extracted_data.get("amount", "0.0"))
-    cleaned_amount_str = re.sub(r'[^\d.]', '', amount_str)  # Remove currency, commas, etc.
-
-    claim_amount = 0.0
-    try:
-        claim_amount = float(cleaned_amount_str) if cleaned_amount_str else 0.0
-    except ValueError:
-        print(f"Warning: Could not convert amount '{amount_str}' to float after cleaning. Defaulting to 0.0.")
 
     update = {
         "claim_id": claim_id,
@@ -236,16 +226,16 @@ def read_email_node(state: reimbursementState):
         "sender_email": email_data["sender_email"],
         "receipt_path": email_data["receipt_path"],
         "employee_details": {
-            "employee_id": extracted_data.get("employee_id", "Not Found"),
-            "first_name": extracted_data.get("first_name", "Not Found"),
-            "last_name": extracted_data.get("last_name", "Not Found"),
-            "email_id": extracted_data.get("email_id", "Not Found"),
+            "employee_id": extracted_data.employee_id,
+            "first_name": extracted_data.first_name,
+            "last_name": extracted_data.last_name,
+            "email_id": extracted_data.email_id,
         },
-        "claim_amount": claim_amount,
-        "expense_category": extracted_data.get("category", "Unclear").strip(),
-        "vendor_id": extracted_data.get("vendor_id", "Not Found"),
-        "payment_mode": extracted_data.get("payment_mode", "Not Found"),
-        "date": extracted_data.get("date", "Not Found"),
+        "claim_amount": extracted_data.amount,
+        "expense_category": extracted_data.category.strip(),
+        "vendor_id": extracted_data.vendor_id,
+        "payment_mode": extracted_data.payment_mode,
+        "date": extracted_data.date,
     }
 
     print("Successfully Extracted Data from Email:")
@@ -263,56 +253,29 @@ def process_receipt_node(state: reimbursementState):
             {
                 "role": "system",
                 "content": (
-                    "You are a precision data extraction assistant. Your ONLY output must be a single, valid JSON object. "
-                    "Do not include any explanatory text or markdown.\n"
-                    "Analyze the provided receipt text and return a JSON with these keys:\n"
-                    "- 'amount' (the total amount as a float, e.g., 123.45)\n"
-                    "- 'category' (must be one of: Travel, Meals, Lodging, Office Supplies, Training, Other)\n"
-                    "***IMPORTANT RULE: If the receipt mentions 'local conveyance', 'taxi', 'cab', or 'auto', you MUST map it to the 'Travel' category.***\n"
+                    "You are a precision data extraction assistant. "
+                    "Analyze the provided receipt text and extract the 'amount' and 'category'. "
                     "If a value is missing or ambiguous, set it to 0.0 or 'Unclear'."
                 )
             },
             {
                 "role": "user",
-                "content": f"Analyze the following receipt text and return ONLY the JSON object:\n\n---\nReceipt Text:\n{text}\n---"
+                "content": f"Analyze the following receipt text:\n\n---\nReceipt Text:\n{text}\n---"
             }
         ]
     )
-    response_content = llm.invoke(prompt).content
-    extracted_data = {}
-
+    
     try:
-        json_start_index = response_content.find('{')
-        json_end_index = response_content.rfind('}')
-        if json_start_index != -1 and json_end_index != -1:
-            json_string = response_content[json_start_index:json_end_index + 1]
-            extracted_data = json.loads(json_string)
-        else:
-            print("Warning: No JSON object found in receipt LLM response.")
-            extracted_data = {}
-    except json.JSONDecodeError as e:
-        print(f"Warning: Could not parse JSON from receipt LLM response. Error: {e}")
-        extracted_data = {}
-
-    amount_str = str(extracted_data.get("amount", "0.0"))
-
-    # Explicitly remove the comma
-    cleaned_amount_str = amount_str.replace(',', '')
-
-    # Use the regex to remove any remaining non-numeric characters
-    cleaned_amount_str = re.sub(r'[^\d.]', '', cleaned_amount_str)
-
-    receipt_amount = 0.0
-    try:
-        # Safely convert the fully cleaned string
-        receipt_amount = float(cleaned_amount_str) if cleaned_amount_str else 0.0
-    except ValueError:
-        print(f"Warning: Could not convert receipt amount '{amount_str}' to float. Defaulting to 0.0.")
+        structured_llm = llm.with_structured_output(ReceiptExtraction)
+        extracted_data = structured_llm.invoke(prompt)
+    except Exception as e:
+        print(f"Warning: Guardrails validation failed for receipt. Error: {e}")
+        extracted_data = ReceiptExtraction(amount=0.0, category='Unclear')
 
     update = {
         "extracted_text": text,
-        "receipt_claim_amount": receipt_amount,
-        "receipt_expense_category": extracted_data.get("category", "Unclear").strip()
+        "receipt_claim_amount": extracted_data.amount,
+        "receipt_expense_category": extracted_data.category.strip()
     }
 
     print("Successfully Extracted Data from Receipt:")
@@ -530,34 +493,46 @@ def policy_and_risk_assessment_node(state: reimbursementState):
     vendor_id = state.get("vendor_id", "Not Found")
     grade = employee.get('grade')
 
-    # Policy Lookup
-    print("Policy check in progress")
-    policy_match = pd.DataFrame()
-    if policies_df is not None:
-        if 'normalized_category' not in policies_df.columns:
-            policies_df['normalized_category'] = policies_df['category'].str.lower().str.strip()
-        if 'normalized_grades' not in policies_df.columns:
-            policies_df['normalized_grades'] = policies_df['applicable_grades'].astype(str).str.replace(" ",
-                                                                                                        "").str.upper().str.strip()
-
-        normalized_category = category.lower().strip()
-        normalized_grade = str(grade).upper()
-
-        policy_match = policies_df[
-            (policies_df['normalized_category'] == normalized_category) &
-            (policies_df['normalized_grades'].apply(lambda g: normalized_grade in g.split(',')))
-            ]
-
-    if policy_match.empty:
-        print("❌ No matching policy found.")
+    # Policy Lookup (RAG)
+    print("Policy check in progress (using RAG)")
+    try:
+        retriever = get_policy_retriever()
+        query = f"allowance for category {category} grade {grade}"
+        docs = retriever.invoke(query)
+        context = "\n".join([doc.page_content for doc in docs])
+        
+        class PolicyExtraction(BaseModel):
+            max_allowance: float = Field(description="The maximum allowed value. 0 if not found.")
+            category: str = Field(description="The matching category.")
+            applicable_grades: str = Field(description="The sequence of applicable grades.")
+            found: bool = Field(description="True if the policy was explicitly found in context.")
+            
+        extraction_prompt = [
+            {"role": "system", "content": f"You are a policy expert. Find the max allowance for category '{category}' and grade '{grade}'.\n\nContext:\n{context}"},
+            {"role": "user", "content": "Extract the policy details."}
+        ]
+        structured_llm = llm.with_structured_output(PolicyExtraction)
+        policy_data = structured_llm.invoke(extraction_prompt)
+        
+        if not policy_data.found or policy_data.max_allowance == 0:
+            print("❌ No matching policy found via RAG.")
+            updates["is_compliant"] = False
+            updates["rejection_reason"] = f"No policy found for category '{category}' and grade '{grade}'."
+            updates["risk_level"] = "medium"
+            updates["final_status"] = "Rejected"
+        else:
+            policy = {
+                "category": policy_data.category,
+                "max_allowance": policy_data.max_allowance,
+                "applicable_grades": policy_data.applicable_grades
+            }
+            updates["policy_details"] = policy
+            print(f"✅ Policy matched via RAG → Max Allowance: INR {policy.get('max_allowance')}")
+    except Exception as e:
+        print(f"❌ RAG Error: {e}")
         updates["is_compliant"] = False
-        updates["rejection_reason"] = f"No policy found for category '{category}' and grade '{grade}'."
-        updates["risk_level"] = "medium"
-        updates["final_status"] = "Rejected"
-    else:
-        policy = policy_match.iloc[0].to_dict()
-        updates["policy_details"] = policy
-        print(f"✅ Policy matched → Max Allowance: INR {policy.get('max_allowance')}")
+        updates["rejection_reason"] = "Policy validation failed due to system error."
+        updates["risk_level"] = "high"
 
     # Vendor Lookup (only if compliant so far)
     vendor = {}
